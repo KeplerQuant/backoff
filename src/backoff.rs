@@ -26,19 +26,6 @@ impl Backoff {
     }
 }
 
-/// Returns a new instance of `Backoff` with default configuration.
-impl Clone for Backoff {
-    fn clone(&self) -> Self {
-        Self {
-            attempt: AtomicU64::new(self.attempt.load(Ordering::SeqCst)),
-            factor: self.factor,
-            jitter: self.jitter,
-            min: self.min,
-            max: self.max,
-        }
-    }
-}
-
 impl Backoff {
     /// Sets the minimum duration for backoff.
     pub fn with_min(mut self, min: time::Duration) -> Self {
