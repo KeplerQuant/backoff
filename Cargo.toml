@@ -1,5 +1,5 @@
 [package]
-name = "kepler_backoff"
+name = "hunter_backoff"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
