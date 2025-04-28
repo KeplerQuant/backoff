@@ -1,13 +1,12 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time;
+use std::time::{self, Duration};
 
 use rand::Rng;
 
 /// A backoff strategy that provides durations for retrying operations with exponential backoff.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Backoff {
-    attempt: Arc<AtomicU64>,
+    attempt: AtomicU64,
     factor: f64,
     jitter: bool,
     min: time::Duration,
@@ -18,11 +17,24 @@ impl Backoff {
     /// Creates a new instance of `Backoff` with default configuration.
     pub fn new() -> Self {
         Self {
-            attempt: Arc::new(AtomicU64::new(0)),
+            attempt: AtomicU64::new(0),
             factor: 2.0,
             jitter: false,
             min: time::Duration::from_millis(100),
             max: time::Duration::from_secs(10),
+        }
+    }
+}
+
+/// Returns a new instance of `Backoff` with default configuration.
+impl Clone for Backoff {
+    fn clone(&self) -> Self {
+        Self {
+            attempt: AtomicU64::new(self.attempt.load(Ordering::SeqCst)),
+            factor: self.factor,
+            jitter: self.jitter,
+            min: self.min,
+            max: self.max,
         }
     }
 }
@@ -53,13 +65,13 @@ impl Backoff {
     }
 
     /// Returns the next duration for backoff.
-    pub fn duration(&self) -> time::Duration {
+    pub fn next_duration(&self) -> Duration {
         let attempt = self.attempt.fetch_add(1, Ordering::SeqCst);
-        self.for_attempt(attempt as f64)
+        self.duration_for_attempt(attempt)
     }
 
     /// Returns the current attempt count.
-    pub fn attempt(&self) -> u64 {
+    pub fn current_attempt(&self) -> u64 {
         self.attempt.load(Ordering::SeqCst)
     }
 
@@ -69,26 +81,15 @@ impl Backoff {
     }
 
     /// Returns the backoff duration for the given attempt.
-    pub fn for_attempt(&self, attempt: f64) -> time::Duration {
-        let (min, max, factor) = (self.min, self.max, self.factor);
+    pub fn duration_for_attempt(&self, attempt: u64) -> time::Duration {
+        let base = self.min.as_secs_f64();
+        let mut dur = base * self.factor.powi(attempt as i32);
 
-        let minf = self.min.as_secs_f64();
-        let durf = minf * factor.powf(attempt);
-
-        let durf = if self.jitter {
+        if self.jitter {
             let mut rng = rand::thread_rng();
-            rng.gen_range(minf..=durf) + minf
-        } else {
-            durf
-        };
+            dur = rng.gen_range(base..=dur);
+        }
 
-        let dur = time::Duration::from_secs_f64(durf);
-        if dur < min {
-            return min;
-        }
-        if dur > max {
-            return max;
-        }
-        dur
+        Duration::from_secs_f64(dur).clamp(self.min, self.max)
     }
 }
